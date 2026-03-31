@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+*.env
+
+# Docker
+*.log
+*.pid
+*.swp
+minio_data/
+
+# n8n
+.n8n/

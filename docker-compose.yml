@@ -1,0 +1,138 @@
+services:
+  ollama:
+    image: ollama/ollama:${OLLAMA_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME}_ollama
+    ports:
+      - "${OLLAMA_PORT}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - ai_network
+
+  comfyui:
+    image: ${COMFYUI_IMAGE}
+    container_name: ${COMPOSE_PROJECT_NAME}_comfyui
+    depends_on:
+      ollama:
+        condition: service_healthy
+    ports:
+      - "${COMFYUI_PORT}:8188"
+    environment:
+      CLI_ARGS: ${COMFYUI_CLI_ARGS}
+    volumes:
+      - comfyui_data:/app/user
+      - "${COMFYUI_PROJECT_PATH}:/external-comfyui:rw"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8188/system_stats >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - ai_network
+
+  n8n:
+    image: n8nio/n8n:${N8N_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME}_n8n
+    depends_on:
+      minio:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      comfyui:
+        condition: service_healthy
+    ports:
+      - "${N8N_PORT}:5678"
+    environment:
+      N8N_HOST: ${N8N_HOST}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL}
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL}
+      N8N_BASIC_AUTH_ACTIVE: ${N8N_BASIC_AUTH_ACTIVE}
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
+      N8N_LOG_LEVEL: ${N8N_LOG_LEVEL}
+      EXECUTIONS_MODE: ${N8N_EXECUTIONS_MODE}
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: ${N8N_EXECUTIONS_DATA_SAVE_ON_SUCCESS}
+      EXECUTIONS_DATA_SAVE_ON_ERROR: ${N8N_EXECUTIONS_DATA_SAVE_ON_ERROR}
+      EXECUTIONS_DATA_PRUNE: ${N8N_EXECUTIONS_DATA_PRUNE}
+      EXECUTIONS_DATA_MAX_AGE: ${N8N_EXECUTIONS_DATA_MAX_AGE}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:5678/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+    restart: unless-stopped
+    networks:
+      - ai_network
+
+  minio:
+    image: minio/minio:${MINIO_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME}_minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_API_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - ai_network
+
+  fastkoko:
+    build:
+      context: ./fastkoko
+    container_name: ${COMPOSE_PROJECT_NAME}_fastkoko
+    depends_on:
+      minio:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    ports:
+      - "${FASTKOKO_PORT}:5000"
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+    restart: unless-stopped
+    networks:
+      - ai_network
+
+networks:
+  ai_network:
+    driver: bridge
+
+volumes:
+  n8n_data:
+  minio_data:
+  ollama_data:
+  comfyui_data:
