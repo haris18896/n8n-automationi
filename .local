@@ -1,0 +1,40 @@
+COMPOSE_PROJECT_NAME=ai_pipeline
+
+# ----- Core image tags -----
+N8N_TAG=latest
+MINIO_TAG=latest
+OLLAMA_TAG=latest
+COMFYUI_IMAGE=yanwk/comfyui-boot:latest
+
+# ----- Host ports -----
+N8N_PORT=5678
+COMFYUI_PORT=8188
+OLLAMA_PORT=11434
+FASTKOKO_PORT=5005
+MINIO_API_PORT=9000
+MINIO_CONSOLE_PORT=9001
+
+# ----- Timezone -----
+GENERIC_TIMEZONE=UTC
+
+# ----- n8n -----
+N8N_HOST=localhost
+N8N_PROTOCOL=http
+N8N_WEBHOOK_URL=http://localhost:5678/
+N8N_BASIC_AUTH_ACTIVE=true
+N8N_BASIC_AUTH_USER=admin
+N8N_BASIC_AUTH_PASSWORD=change_me_strong_password
+N8N_ENCRYPTION_KEY=change_me_to_a_long_random_32_plus_char_key
+N8N_LOG_LEVEL=info
+N8N_EXECUTIONS_MODE=regular
+N8N_EXECUTIONS_DATA_SAVE_ON_SUCCESS=none
+N8N_EXECUTIONS_DATA_SAVE_ON_ERROR=all
+N8N_EXECUTIONS_DATA_PRUNE=true
+N8N_EXECUTIONS_DATA_MAX_AGE=336
+
+# ----- MinIO -----
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=change_me_minio_super_secret
+
+# ----- ComfyUI -----
+COMFYUI_BASE_URL=http://host.docker.internal:8188

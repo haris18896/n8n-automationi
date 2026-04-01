@@ -16,29 +16,6 @@ services:
     networks:
       - ai_network
 
-  comfyui:
-    image: ${COMFYUI_IMAGE}
-    container_name: ${COMPOSE_PROJECT_NAME}_comfyui
-    depends_on:
-      ollama:
-        condition: service_healthy
-    ports:
-      - "${COMFYUI_PORT}:8188"
-    environment:
-      CLI_ARGS: ${COMFYUI_CLI_ARGS}
-    volumes:
-      - comfyui_data:/app/user
-      - "${COMFYUI_PROJECT_PATH}:/external-comfyui:rw"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:8188/system_stats >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
-    restart: unless-stopped
-    networks:
-      - ai_network
-
   n8n:
     image: n8nio/n8n:${N8N_TAG}
     container_name: ${COMPOSE_PROJECT_NAME}_n8n
@@ -46,8 +23,6 @@ services:
       minio:
         condition: service_healthy
       ollama:
-        condition: service_healthy
-      comfyui:
         condition: service_healthy
     ports:
       - "${N8N_PORT}:5678"
@@ -67,8 +42,11 @@ services:
       EXECUTIONS_DATA_SAVE_ON_ERROR: ${N8N_EXECUTIONS_DATA_SAVE_ON_ERROR}
       EXECUTIONS_DATA_PRUNE: ${N8N_EXECUTIONS_DATA_PRUNE}
       EXECUTIONS_DATA_MAX_AGE: ${N8N_EXECUTIONS_DATA_MAX_AGE}
+      COMFYUI_BASE_URL: ${COMFYUI_BASE_URL}
     volumes:
       - n8n_data:/home/node/.n8n
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:5678/healthz >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -102,8 +80,7 @@ services:
       - ai_network
 
   fastkoko:
-    build:
-      context: ./fastkoko
+    image: ${FASTKOKO_IMAGE}
     container_name: ${COMPOSE_PROJECT_NAME}_fastkoko
     depends_on:
       minio:
@@ -111,14 +88,18 @@ services:
       ollama:
         condition: service_healthy
     ports:
-      - "${FASTKOKO_PORT}:5000"
+      # Kokoro FastAPI (remsky image) listens on 8880 inside the container, not 5000
+      - "${FASTKOKO_PORT}:8880"
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      COMFYUI_BASE_URL: ${COMFYUI_BASE_URL}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/ >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8880/docs >/dev/null 2>&1 || curl -fsS http://localhost:8880/ >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -135,4 +116,3 @@ volumes:
   n8n_data:
   minio_data:
   ollama_data:
-  comfyui_data:
