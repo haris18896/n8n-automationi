@@ -22,6 +22,12 @@ def _to_csv_set(value: str | None, default: tuple[str, ...]) -> set[str]:
     return {item.strip().lower() for item in value.split(",") if item.strip()}
 
 
+def _to_float(value: str | None, default: float) -> float:
+    if value is None or str(value).strip() == "":
+        return default
+    return float(value)
+
+
 @dataclass(frozen=True)
 class RenderVideoConfig:
     width: int
@@ -34,6 +40,25 @@ class RenderVideoConfig:
     audio_codec: str
     audio_bitrate: str
     movflags: str
+
+
+@dataclass(frozen=True)
+class SubjectAwareCropConfig:
+    enabled: bool
+    analysis_interval_seconds: float
+    analysis_max_dimension: int
+    smoothing_alpha: float
+    deadzone_px: int
+    face_detection_enabled: bool
+    object_detection_enabled: bool
+    motion_fallback_enabled: bool
+    min_face_box_area_ratio: float
+    min_subject_box_area_ratio: float
+    min_subject_confidence: float
+    motion_area_ratio_threshold: float
+    motion_pixel_threshold: int
+    max_keyframes: int
+    min_keyframe_spacing_seconds: float
 
 
 @dataclass(frozen=True)
@@ -145,6 +170,44 @@ class Settings:
         audio_codec=os.getenv("AUDIO_CODEC", "aac"),
         audio_bitrate=os.getenv("AUDIO_BITRATE", "192k"),
         movflags=os.getenv("VIDEO_MOVFLAGS", "+faststart"),
+    )
+
+    subject_aware_crop = SubjectAwareCropConfig(
+        enabled=_to_bool(os.getenv("SUBJECT_AWARE_CROP_ENABLED"), True),
+        analysis_interval_seconds=_to_float(
+            os.getenv("CROP_ANALYSIS_INTERVAL_SECONDS"), 0.5
+        ),
+        analysis_max_dimension=_to_int(
+            os.getenv("CROP_ANALYSIS_MAX_DIMENSION"), 640
+        ),
+        smoothing_alpha=_to_float(os.getenv("CROP_SMOOTHING_ALPHA"), 0.2),
+        deadzone_px=_to_int(os.getenv("CROP_DEADZONE_PX"), 24),
+        face_detection_enabled=_to_bool(os.getenv("FACE_DETECTION_ENABLED"), True),
+        object_detection_enabled=_to_bool(
+            os.getenv("OBJECT_DETECTION_ENABLED"), True
+        ),
+        motion_fallback_enabled=_to_bool(
+            os.getenv("MOTION_FALLBACK_ENABLED"), True
+        ),
+        min_face_box_area_ratio=_to_float(
+            os.getenv("MIN_FACE_BOX_AREA_RATIO"), 0.01
+        ),
+        min_subject_box_area_ratio=_to_float(
+            os.getenv("MIN_SUBJECT_BOX_AREA_RATIO"), 0.02
+        ),
+        min_subject_confidence=_to_float(
+            os.getenv("MIN_SUBJECT_CONFIDENCE"), 0.45
+        ),
+        motion_area_ratio_threshold=_to_float(
+            os.getenv("MOTION_AREA_RATIO_THRESHOLD"), 0.015
+        ),
+        motion_pixel_threshold=_to_int(
+            os.getenv("MOTION_PIXEL_THRESHOLD"), 25
+        ),
+        max_keyframes=_to_int(os.getenv("CROP_MAX_KEYFRAMES"), 8),
+        min_keyframe_spacing_seconds=_to_float(
+            os.getenv("CROP_MIN_KEYFRAME_SPACING_SECONDS"), 1.5
+        ),
     )
 
     render_overlay = OverlayConfig(

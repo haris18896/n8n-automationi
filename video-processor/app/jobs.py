@@ -16,6 +16,7 @@ from .ffmpeg_utils import (
 )
 from .models import CandidateSegment
 from .ollama_ranker import rank_segments_with_ollama
+from .reframing import CropPlan, analyze_subject_aware_crop
 from .storage import download_file, object_exists, upload_file
 from .subtitles import transcribe_segments, write_ass_from_segments
 
@@ -266,6 +267,38 @@ def _ensure_source_video(job_id: str, youtube_url: str, source_video: Path) -> s
     return "youtube"
 
 
+def _build_crop_plan(clip_video: Path, render_mode: str, job_id: str) -> CropPlan | None:
+    if render_mode != "cover_crop":
+        logger.info(
+            "Job %s skipping subject-aware crop because render_mode=%s",
+            job_id,
+            render_mode,
+        )
+        return None
+
+    if not settings.subject_aware_crop.enabled:
+        logger.info("Job %s subject-aware crop disabled by config", job_id)
+        return None
+
+    try:
+        with log_timing("subject_aware_crop", job_id):
+            crop_plan = analyze_subject_aware_crop(str(clip_video))
+        logger.info(
+            "Job %s subject-aware crop ready with %s keyframes and methods=%s",
+            job_id,
+            len(crop_plan.keyframes),
+            crop_plan.method_counts,
+        )
+        return crop_plan
+    except Exception as exc:
+        logger.warning(
+            "Job %s subject-aware crop failed, falling back to static center crop: %s",
+            job_id,
+            exc,
+        )
+        return None
+
+
 def process_clip_job(payload) -> dict:
     job_id = payload.job_id
     workdir = Path(f"/tmp/video-processor/{job_id}")
@@ -405,6 +438,8 @@ def process_clip_job(payload) -> dict:
     else:
         clip_transcript = " ".join(segment_to_text(segment) for segment in clip_segments).strip()
 
+    crop_plan = _build_crop_plan(clip_video, render_mode, job_id)
+
     with log_timing("final_render", job_id):
         burn_subtitles_and_overlays(
             input_path=str(clip_video),
@@ -417,6 +452,7 @@ def process_clip_job(payload) -> dict:
                 "watermark",
             ),
             render_mode=render_mode,
+            crop_plan=crop_plan,
         )
 
     object_name = _final_video_object_name(job_id)
