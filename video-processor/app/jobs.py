@@ -5,10 +5,12 @@ from pathlib import Path
 from typing import Iterable
 
 from .config import settings
+from .clip_completion import extend_clip_end_for_complete_sentence
 from .ffmpeg_utils import (
     burn_subtitles_and_overlays,
     detect_scene_cuts,
     download_video,
+    get_media_duration_seconds,
     get_render_transform_mode,
     trim_video,
 )
@@ -337,6 +339,37 @@ def process_clip_job(payload) -> dict:
         snapped_start, snapped_end = snap_to_nearest_scene(best["start"], best["end"], scene_cuts)
         selected_start = float(snapped_start)
         selected_end = float(snapped_end)
+        if settings.AUTO_CLIP_SENTENCE_COMPLETION_ENABLED:
+            probe_duration = get_media_duration_seconds(str(source_video))
+            last_speech = max(
+                (float(getattr(s, "end", 0.0)) for s in transcript_segments),
+                default=selected_end,
+            )
+            hard_cap = probe_duration if probe_duration is not None else last_speech + 5.0
+            hard_cap = max(hard_cap, selected_end)
+            extended_end, completion_reason = extend_clip_end_for_complete_sentence(
+                transcript_segments,
+                selected_start,
+                selected_end,
+                max_extra_seconds=float(settings.AUTO_CLIP_COMPLETION_MAX_EXTRA_SECONDS),
+                hard_cap_end=hard_cap,
+            )
+            if extended_end > selected_end + 0.05:
+                logger.info(
+                    "Job %s extended clip end for complete sentence: %s -> %s (+%.2fs) [%s]",
+                    job_id,
+                    seconds_to_hhmmss(selected_end),
+                    seconds_to_hhmmss(extended_end),
+                    extended_end - selected_end,
+                    completion_reason,
+                )
+            else:
+                logger.info(
+                    "Job %s clip end unchanged after sentence pass [%s]",
+                    job_id,
+                    completion_reason,
+                )
+            selected_end = extended_end
         logger.info(
             "Job %s selected auto clip range start=%s end=%s score=%.3f reason=%s",
             job_id,

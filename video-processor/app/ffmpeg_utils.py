@@ -62,6 +62,33 @@ def _video_encoding_args(render_config: RenderVideoConfig) -> list[str]:
     ]
 
 
+def get_media_duration_seconds(path: str) -> float | None:
+    try:
+        process = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                path,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if process.returncode != 0:
+            return None
+        line = (process.stdout or "").strip()
+        if not line:
+            return None
+        return float(line)
+    except (OSError, ValueError):
+        return None
+
+
 def trim_video(
     input_path: str,
     output_path: str,

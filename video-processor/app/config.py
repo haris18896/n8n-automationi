@@ -121,6 +121,13 @@ class Settings:
     DEFAULT_CLIP_MAX_SECONDS = _to_int(os.getenv("DEFAULT_CLIP_MAX_SECONDS"), 45)
     DEFAULT_TOP_K_SEGMENTS = _to_int(os.getenv("DEFAULT_TOP_K_SEGMENTS"), 5)
 
+    AUTO_CLIP_SENTENCE_COMPLETION_ENABLED = _to_bool(
+        os.getenv("AUTO_CLIP_SENTENCE_COMPLETION_ENABLED"), True
+    )
+    AUTO_CLIP_COMPLETION_MAX_EXTRA_SECONDS = _to_int(
+        os.getenv("AUTO_CLIP_COMPLETION_MAX_EXTRA_SECONDS"), 120
+    )
+
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
     OLLAMA_TIMEOUT_SECONDS = _to_int(os.getenv("OLLAMA_TIMEOUT_SECONDS"), 120)

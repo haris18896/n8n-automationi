@@ -50,3 +50,6 @@ init:
 
 buckets:
 	@bash ./scripts/init-minio.sh
+
+rebuild-video-processor:
+	docker compose build video-processor && docker compose up -d video-processor && docker compose up -d --force-recreate video-processor
