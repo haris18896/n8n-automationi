@@ -1,0 +1,3 @@
+Add these files:
+- cta_like_subscribe.png
+- watermark.png

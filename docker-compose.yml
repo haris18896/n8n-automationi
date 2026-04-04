@@ -1,28 +1,68 @@
 services:
-  ollama:
-    image: ollama/ollama:${OLLAMA_TAG}
-    container_name: ${COMPOSE_PROJECT_NAME}_ollama
-    ports:
-      - "${OLLAMA_PORT}:11434"
+  postgres:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - ollama_data:/root/.ollama
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
-    networks:
-      - ai_network
+    networks: [ai_network]
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [ai_network]
+
+  minio:
+    image: minio/minio:latest
+    container_name: ${COMPOSE_PROJECT_NAME}_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_API_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:9000/minio/health/live >/dev/null || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [ai_network]
 
   n8n:
-    image: n8nio/n8n:${N8N_TAG}
+    image: n8nio/n8n:latest
     container_name: ${COMPOSE_PROJECT_NAME}_n8n
     depends_on:
-      minio:
+      postgres:
         condition: service_healthy
-      ollama:
+      redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     ports:
       - "${N8N_PORT}:5678"
@@ -36,83 +76,121 @@ services:
       N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
-      N8N_LOG_LEVEL: ${N8N_LOG_LEVEL}
-      EXECUTIONS_MODE: ${N8N_EXECUTIONS_MODE}
-      EXECUTIONS_DATA_SAVE_ON_SUCCESS: ${N8N_EXECUTIONS_DATA_SAVE_ON_SUCCESS}
-      EXECUTIONS_DATA_SAVE_ON_ERROR: ${N8N_EXECUTIONS_DATA_SAVE_ON_ERROR}
-      EXECUTIONS_DATA_PRUNE: ${N8N_EXECUTIONS_DATA_PRUNE}
-      EXECUTIONS_DATA_MAX_AGE: ${N8N_EXECUTIONS_DATA_MAX_AGE}
-      COMFYUI_BASE_URL: ${COMFYUI_BASE_URL}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      EXECUTIONS_MODE: queue
+      QUEUE_BULL_REDIS_HOST: redis
+      QUEUE_BULL_REDIS_PORT: 6379
+      N8N_RUNNERS_ENABLED: true
+      N8N_LOG_LEVEL: info
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+      EXECUTIONS_DATA_PRUNE: true
+      EXECUTIONS_DATA_MAX_AGE: 168
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./n8n:/project-n8n
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://localhost:5678/healthz >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:5678/healthz >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 45s
-    restart: unless-stopped
-    networks:
-      - ai_network
+    networks: [ai_network]
 
-  minio:
-    image: minio/minio:${MINIO_TAG}
-    container_name: ${COMPOSE_PROJECT_NAME}_minio
-    command: server /data --console-address ":9001"
-    ports:
-      - "${MINIO_API_PORT}:9000"
-      - "${MINIO_CONSOLE_PORT}:9001"
+  n8n-worker:
+    image: n8nio/n8n:latest
+    container_name: ${COMPOSE_PROJECT_NAME}_n8n_worker
+    command: worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      EXECUTIONS_MODE: queue
+      QUEUE_BULL_REDIS_HOST: redis
+      QUEUE_BULL_REDIS_PORT: 6379
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
+      N8N_LOG_LEVEL: info
     volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
+      - n8n_data:/home/node/.n8n
     restart: unless-stopped
-    networks:
-      - ai_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [ai_network]
 
-  fastkoko:
-    image: ${FASTKOKO_IMAGE}
-    container_name: ${COMPOSE_PROJECT_NAME}_fastkoko
+  video-processor:
+    build:
+      context: ./video-processor
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME}_video_processor
     depends_on:
       minio:
         condition: service_healthy
-      ollama:
-        condition: service_healthy
-    ports:
-      # Kokoro FastAPI (remsky image) listens on 8880 inside the container, not 5000
-      - "${FASTKOKO_PORT}:8880"
     environment:
-      OLLAMA_BASE_URL: http://ollama:11434
-      MINIO_ENDPOINT: http://minio:9000
+      APP_PORT: 8000
+      TZ: ${GENERIC_TIMEZONE}
+      MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      COMFYUI_BASE_URL: ${COMFYUI_BASE_URL}
+      MINIO_SECURE: "false"
+      MINIO_BUCKET_RAW: raw-videos
+      MINIO_BUCKET_OUTPUT: processed-videos
+      MINIO_BUCKET_ASSETS: assets
+      WHISPER_MODEL: ${WHISPER_MODEL}
+      TRANSCRIBE_DEVICE: ${TRANSCRIBE_DEVICE}
+      TRANSCRIBE_COMPUTE_TYPE: ${TRANSCRIBE_COMPUTE_TYPE}
+      DEFAULT_TARGET_RATIO: ${DEFAULT_TARGET_RATIO}
+      DEFAULT_CLIP_MIN_SECONDS: ${DEFAULT_CLIP_MIN_SECONDS}
+      DEFAULT_CLIP_MAX_SECONDS: ${DEFAULT_CLIP_MAX_SECONDS}
+      DEFAULT_TOP_K_SEGMENTS: ${DEFAULT_TOP_K_SEGMENTS}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      OLLAMA_MODEL: ${OLLAMA_MODEL}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS}
+    ports:
+      - "${VIDEO_PROCESSOR_PORT}:8000"
+    volumes:
+      - ./assets:/app/assets
+      - video_processor_tmp:/tmp/video-processor
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8000/health >/dev/null || exit 1",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8880/docs >/dev/null 2>&1 || curl -fsS http://localhost:8880/ >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 45s
-    restart: unless-stopped
-    networks:
-      - ai_network
+    networks: [ai_network]
 
 networks:
   ai_network:
     driver: bridge
 
 volumes:
-  n8n_data:
+  postgres_data:
+  redis_data:
   minio_data:
-  ollama_data:
+  n8n_data:
+  video_processor_tmp:
