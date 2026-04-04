@@ -186,7 +186,7 @@ def build_filtergraph(
     input_index = 1
 
     if cta_path:
-        input_args.extend(["-i", cta_path])
+        input_args.extend(["-loop", "1", "-i", cta_path])
         filter_parts.append(
             f"[{input_index}:v]scale={active_overlay_config.cta_width}:-1[cta]"
         )
@@ -198,22 +198,19 @@ def build_filtergraph(
         input_index += 1
 
     if watermark_path:
-        input_args.extend(["-i", watermark_path])
+        input_args.extend(["-loop", "1", "-i", watermark_path])
+        wm = active_overlay_config.watermark_size
+        filter_parts.append(f"[{input_index}:v]scale={wm}:-1[watermark]")
+        m = active_overlay_config.watermark_margin
         filter_parts.append(
-            f"[{input_index}:v]scale={active_overlay_config.watermark_size}:"
-            f"{active_overlay_config.watermark_size}[watermark]"
-        )
-        filter_parts.append(
-            f"{current_label}[watermark]overlay=W-w-{active_overlay_config.watermark_margin}:"
-            f"H-h-{active_overlay_config.watermark_margin}[with_watermark]"
+            f"{current_label}[watermark]overlay=W-w-{m}:{m}[with_watermark]"
         )
         current_label = "[with_watermark]"
         input_index += 1
 
     if ass_path:
-        filter_parts.append(
-            f"{current_label}subtitles='{_escape_filter_path(ass_path)}'[finalv]"
-        )
+        ass_opt = f"'{_escape_filter_path(ass_path)}':charenc=UTF-8"
+        filter_parts.append(f"{current_label}subtitles={ass_opt}[finalv]")
         current_label = "[finalv]"
 
     return input_args, ";".join(filter_parts), current_label

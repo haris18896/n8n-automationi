@@ -141,25 +141,25 @@ class Settings:
     )
 
     render_overlay = OverlayConfig(
-        watermark_size=_to_int(os.getenv("WATERMARK_SIZE"), 25),
-        watermark_margin=_to_int(os.getenv("WATERMARK_MARGIN"), 14),
-        cta_width=_to_int(os.getenv("CTA_WIDTH"), 120),
-        cta_margin=_to_int(os.getenv("CTA_MARGIN"), 14),
+        watermark_size=_to_int(os.getenv("WATERMARK_SIZE"), 128),
+        watermark_margin=_to_int(os.getenv("WATERMARK_MARGIN"), 18),
+        cta_width=_to_int(os.getenv("CTA_WIDTH"), 200),
+        cta_margin=_to_int(os.getenv("CTA_MARGIN"), 18),
     )
 
     subtitle_style = SubtitleStyleConfig(
         font_name=os.getenv("SUBTITLE_FONT_NAME", "DejaVu Sans"),
-        font_size=_to_int(os.getenv("SUBTITLE_FONT_SIZE"), 16),
+        font_size=_to_int(os.getenv("SUBTITLE_FONT_SIZE"), 54),
         primary_color=os.getenv("SUBTITLE_PRIMARY_COLOR", "&H00FFFFFF&"),
         highlight_color=os.getenv("SUBTITLE_HIGHLIGHT_COLOR", "&H0038D8FF&"),
         outline_color=os.getenv("SUBTITLE_OUTLINE_COLOR", "&H00000000&"),
         back_color=os.getenv("SUBTITLE_BACK_COLOR", "&H64000000&"),
         bold=_to_bool(os.getenv("SUBTITLE_BOLD"), True),
         alignment=_to_int(os.getenv("SUBTITLE_ALIGNMENT"), 2),
-        margin_v=_to_int(os.getenv("SUBTITLE_MARGIN_V"), 48),
+        margin_v=_to_int(os.getenv("SUBTITLE_MARGIN_V"), 120),
         margin_l=_to_int(os.getenv("SUBTITLE_MARGIN_L"), 80),
         margin_r=_to_int(os.getenv("SUBTITLE_MARGIN_R"), 80),
-        outline=_to_int(os.getenv("SUBTITLE_OUTLINE"), 2),
+        outline=_to_int(os.getenv("SUBTITLE_OUTLINE"), 3),
         shadow=_to_int(os.getenv("SUBTITLE_SHADOW"), 0),
         max_words_per_line=_to_int(os.getenv("SUBTITLE_MAX_WORDS_PER_LINE"), 5),
         max_lines=_to_int(os.getenv("SUBTITLE_MAX_LINES"), 1),

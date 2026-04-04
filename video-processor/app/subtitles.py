@@ -317,9 +317,13 @@ def write_ass_from_segments(
                 f"{format_ass_timestamp(start)},{format_ass_timestamp(end)},Default,,0,0,0,,{styled_text}"
             )
 
+    rw = settings.render_video.width
+    rh = settings.render_video.height
     with open(output_path, "w", encoding="utf-8") as handle:
         handle.write("[Script Info]\n")
         handle.write("ScriptType: v4.00+\n")
+        handle.write(f"PlayResX: {rw}\n")
+        handle.write(f"PlayResY: {rh}\n")
         handle.write("ScaledBorderAndShadow: yes\n")
         handle.write("WrapStyle: 0\n")
         handle.write("YCbCr Matrix: TV.709\n\n")
