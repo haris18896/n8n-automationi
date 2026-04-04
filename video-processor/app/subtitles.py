@@ -1,10 +1,15 @@
+import logging
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Iterable
 
 from faster_whisper import WhisperModel
 
 from .config import SubtitleStyleConfig, settings
+from .subtitle_emphasis import extract_emphasis_for_line, line_qualifies_for_llm
+
+logger = logging.getLogger(__name__)
 
 
 _model: WhisperModel | None = None
@@ -78,26 +83,100 @@ def _normalize_match_token(value: str) -> str:
     return re.sub(r"^[^\w']+|[^\w']+$", "", value.lower())
 
 
+def style_ass_line(
+    raw_line: str,
+    style: SubtitleStyleConfig,
+    *,
+    category_by_normalized: dict[str, str] | None = None,
+    category_colors: Mapping[str, str] | None = None,
+) -> str:
+    tokens = _tokenize_with_punctuation(raw_line)
+    if not tokens:
+        return ""
+
+    colors = (
+        category_colors
+        if category_colors is not None
+        else settings.subtitle_emphasis.category_colors
+    )
+
+    styled_parts: list[str] = []
+    for token in tokens:
+        normalized = _normalize_match_token(token)
+        escaped = _ass_escape(token)
+        color_tag: str | None = None
+        reset = f"{{\\c{style.primary_color}}}"
+
+        if category_by_normalized and normalized:
+            category = category_by_normalized.get(normalized)
+            if category:
+                ass_color = colors.get(
+                    category.lower(), style.highlight_color
+                )
+                color_tag = f"{{\\c{ass_color}}}"
+
+        if color_tag is None and normalized and normalized in style.highlighted_words:
+            color_tag = f"{{\\c{style.highlight_color}}}"
+
+        if color_tag:
+            escaped = f"{color_tag}{escaped}{reset}"
+
+        if styled_parts and re.match(r"[^\w']", token):
+            styled_parts[-1] = f"{styled_parts[-1]}{escaped}"
+        else:
+            styled_parts.append(escaped)
+    return " ".join(styled_parts)
+
+
 def style_ass_text(text: str, style: SubtitleStyleConfig) -> str:
     styled_lines: list[str] = []
     for raw_line in text.split(r"\N"):
-        tokens = _tokenize_with_punctuation(raw_line)
-        if not tokens:
+        if not raw_line.strip():
             continue
-
-        styled_parts: list[str] = []
-        for token in tokens:
-            escaped = _ass_escape(token)
-            normalized = _normalize_match_token(token)
-            if normalized and normalized in style.highlighted_words:
-                escaped = f"{{\\c{style.highlight_color}}}{escaped}{{\\c{style.primary_color}}}"
-
-            if styled_parts and re.match(r"[^\w']", token):
-                styled_parts[-1] = f"{styled_parts[-1]}{escaped}"
-            else:
-                styled_parts.append(escaped)
-        styled_lines.append(" ".join(styled_parts))
+        line_out = style_ass_line(
+            raw_line, style, category_by_normalized=None
+        )
+        if line_out:
+            styled_lines.append(line_out)
     return r"\N".join(styled_lines)
+
+
+def _style_wrapped_for_ass_dialogue(
+    wrapped: str, style: SubtitleStyleConfig
+) -> str:
+    """Apply LLM emphasis per visual line when enabled; else heuristic only."""
+    out_lines: list[str] = []
+    for visual_line in wrapped.split(r"\N"):
+        if not visual_line.strip():
+            continue
+        llm_highlights = (
+            extract_emphasis_for_line(visual_line)
+            if settings.subtitle_emphasis.llm_enabled
+            else []
+        )
+        category_by_norm: dict[str, str] | None = None
+        if llm_highlights:
+            category_by_norm = {}
+            for item in llm_highlights:
+                key = _normalize_match_token(item["word"])
+                if key and key not in category_by_norm:
+                    category_by_norm[key] = item["category"]
+        elif (
+            settings.subtitle_emphasis.llm_enabled
+            and line_qualifies_for_llm(visual_line)
+        ):
+            logger.info(
+                "subtitle emphasis: heuristic fallback for ASS line (no LLM highlights)"
+            )
+
+        out_lines.append(
+            style_ass_line(
+                visual_line,
+                style,
+                category_by_normalized=category_by_norm,
+            )
+        )
+    return r"\N".join(out_lines)
 
 
 def wrap_subtitle_text(text: str, style: SubtitleStyleConfig) -> str:
@@ -232,7 +311,7 @@ def write_ass_from_segments(
                 continue
             transcript_lines.append(cleaned)
             wrapped = wrap_subtitle_text(cleaned, subtitle_style)
-            styled_text = style_ass_text(wrapped, subtitle_style)
+            styled_text = _style_wrapped_for_ass_dialogue(wrapped, subtitle_style)
             events.append(
                 "Dialogue: 0,"
                 f"{format_ass_timestamp(start)},{format_ass_timestamp(end)},Default,,0,0,0,,{styled_text}"

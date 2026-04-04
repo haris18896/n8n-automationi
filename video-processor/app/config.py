@@ -1,5 +1,7 @@
+import json
 import os
 from dataclasses import dataclass
+from typing import Mapping
 
 
 def _to_bool(value: str | None, default: bool = False) -> bool:
@@ -63,6 +65,42 @@ class SubtitleStyleConfig:
     highlighted_words: set[str]
 
 
+DEFAULT_SUBTITLE_EMPHASIS_COLORS: dict[str, str] = {
+    "action": "&H001890FF&",
+    "emotional": "&H005564E6&",
+    "dramatic": "&H00B469E6&",
+    "warning": "&H0000D7FF&",
+    "money": "&H0000E676&",
+    "curiosity": "&H00FFB84D&",
+}
+
+
+@dataclass(frozen=True)
+class SubtitleEmphasisConfig:
+    llm_enabled: bool
+    timeout_seconds: int
+    min_words_for_llm: int
+    min_chars_for_llm: int
+    category_colors: Mapping[str, str]
+
+
+def _load_subtitle_emphasis_colors() -> dict[str, str]:
+    merged = dict(DEFAULT_SUBTITLE_EMPHASIS_COLORS)
+    raw = os.getenv("SUBTITLE_EMPHASIS_CATEGORY_COLORS")
+    if not raw or not raw.strip():
+        return merged
+    try:
+        custom = json.loads(raw)
+        if isinstance(custom, dict):
+            for key, value in custom.items():
+                k = str(key).strip().lower()
+                if k in DEFAULT_SUBTITLE_EMPHASIS_COLORS and isinstance(value, str):
+                    merged[k] = value.strip()
+    except json.JSONDecodeError:
+        pass
+    return merged
+
+
 class Settings:
     APP_PORT = _to_int(os.getenv("APP_PORT"), 8000)
 
@@ -118,14 +156,14 @@ class Settings:
         back_color=os.getenv("SUBTITLE_BACK_COLOR", "&H64000000&"),
         bold=_to_bool(os.getenv("SUBTITLE_BOLD"), True),
         alignment=_to_int(os.getenv("SUBTITLE_ALIGNMENT"), 2),
-        margin_v=_to_int(os.getenv("SUBTITLE_MARGIN_V"), 220),
+        margin_v=_to_int(os.getenv("SUBTITLE_MARGIN_V"), 48),
         margin_l=_to_int(os.getenv("SUBTITLE_MARGIN_L"), 80),
         margin_r=_to_int(os.getenv("SUBTITLE_MARGIN_R"), 80),
         outline=_to_int(os.getenv("SUBTITLE_OUTLINE"), 2),
         shadow=_to_int(os.getenv("SUBTITLE_SHADOW"), 0),
-        max_words_per_line=_to_int(os.getenv("SUBTITLE_MAX_WORDS_PER_LINE"), 4),
-        max_lines=_to_int(os.getenv("SUBTITLE_MAX_LINES"), 2),
-        max_chars_per_line=_to_int(os.getenv("SUBTITLE_MAX_CHARS_PER_LINE"), 18),
+        max_words_per_line=_to_int(os.getenv("SUBTITLE_MAX_WORDS_PER_LINE"), 5),
+        max_lines=_to_int(os.getenv("SUBTITLE_MAX_LINES"), 1),
+        max_chars_per_line=_to_int(os.getenv("SUBTITLE_MAX_CHARS_PER_LINE"), 28),
         highlighted_words=_to_csv_set(
             os.getenv("SUBTITLE_HIGHLIGHT_WORDS"),
             (
@@ -165,6 +203,14 @@ class Settings:
                 "yes",
             ),
         ),
+    )
+
+    subtitle_emphasis = SubtitleEmphasisConfig(
+        llm_enabled=_to_bool(os.getenv("SUBTITLE_LLM_EMPHASIS_ENABLED"), False),
+        timeout_seconds=_to_int(os.getenv("SUBTITLE_EMPHASIS_TIMEOUT_SECONDS"), 25),
+        min_words_for_llm=_to_int(os.getenv("SUBTITLE_EMPHASIS_MIN_WORDS"), 3),
+        min_chars_for_llm=_to_int(os.getenv("SUBTITLE_EMPHASIS_MIN_CHARS"), 10),
+        category_colors=_load_subtitle_emphasis_colors(),
     )
 
 
