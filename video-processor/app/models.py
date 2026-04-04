@@ -13,6 +13,7 @@ class ClipJobRequest(BaseModel):
     cta_enabled: bool = True
     watermark_enabled: bool = True
     watermark_text: Optional[str] = None
+    render_mode: Optional[Literal["cover_crop", "contain_blur_bg"]] = None
 
 class CandidateSegment(BaseModel):
     start: float

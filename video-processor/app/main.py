@@ -1,8 +1,17 @@
+import logging
+
 from fastapi import FastAPI
+
+from .config import settings
 from .jobs import process_clip_job
 from .models import ClipJobRequest, ClipJobResponse
 
-app = FastAPI(title="YouTube Video Clipper", version="1.0.0")
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+
+app = FastAPI(title="YouTube Video Clipper", version="1.1.0")
 
 @app.get("/health")
 def health():
